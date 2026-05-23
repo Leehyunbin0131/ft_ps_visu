@@ -1,0 +1,2 @@
+[console_scripts]
+ft_ps_visu = ft_ps_visu.cli:main

@@ -1,3 +1,30 @@
+Metadata-Version: 2.4
+Name: ft_ps_visu
+Version: 1.0.0
+Summary: A terminal visualizer for the 42 push_swap project with real-time TUI, controlled disorder generation, and interactive playback.
+Author: Italo Almeida
+License: MIT
+Project-URL: Homepage, https://github.com/italoalmeida0/ft_ps_visu
+Project-URL: Issues, https://github.com/italoalmeida0/ft_ps_visu/issues
+Keywords: 42,push_swap,visualizer,terminal,tui,sorting,algorithm
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Education :: Testing
+Classifier: Topic :: Software Development :: Testing
+Classifier: Topic :: Terminals
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
+
 # ft_ps_visu
 
 A terminal visualizer for the **42 push_swap** project. It generates controlled random sequences with specific disorder levels, runs your `push_swap` executable, and renders a real-time TUI (Terminal User Interface) with interactive playback controls.
