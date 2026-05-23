@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ft_ps_visu"
+version = "1.0.0"
+description = "A terminal visualizer for the 42 push_swap project with real-time TUI, controlled disorder generation, and interactive playback."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.7"
+authors = [
+    {name = "Italo Almeida"}
+]
+keywords = ["42", "push_swap", "visualizer", "terminal", "tui", "sorting", "algorithm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education :: Testing",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Terminals",
+]
+
+[project.scripts]
+ft_ps_visu = "ft_ps_visu.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/italoalmeida0/ft_ps_visu"
+Issues = "https://github.com/italoalmeida0/ft_ps_visu/issues"
