@@ -186,7 +186,9 @@ Replay with both numbers and operations from files (push_swap is **not** execute
 ft_ps_visu --ops report_100_simple_ops_1.txt --nums report_100_simple_nums_1.txt ./push_swap
 ```
 
-> **Note:** The `push_swap` executable path is still required because the visualizer validates its existence on startup, but it is **not** executed when `--ops` is provided.
+When `--ops` is passed, `--nums` is **required**. The `push_swap` path becomes optional but can still be provided (for example, to enable the `make` feature).
+
+> **Note:** When `--ops` is provided, the visualizer does not run `push_swap`. Controls that would regenerate data or change generation parameters are hidden from the UI.
 
 ---
 
@@ -206,6 +208,21 @@ ft_ps_visu --ops report_100_simple_ops_1.txt --nums report_100_simple_nums_1.txt
 | `S` | Increase number of elements |
 | `D` | Decrease disorder percentage |
 | `F` | Increase disorder percentage |
+| `C` | Run `make` in the push_swap directory |
+| `E` | Check if Stack A is sorted (shows OK/KO) |
+| `Q` | Quit |
+
+> **Note:** Controls `G`, `A`, `S`, `D`, `F` are hidden when `--ops` is used. Controls `G`, `A`, `S`, `D`, `F`, `C` are hidden when `--nums` is used without `--ops`. `C` is hidden when `--ops` is used or when no push_swap path is provided.
+
+### Make screen (`C`)
+
+Pressing `C` opens a make screen that runs `make` in the directory of the provided `push_swap` executable.
+
+| Key | Action |
+|-----|--------|
+| `W` | Return to the visualizer (only if the binary exists) |
+| `C` | Run `make` again |
+| `R` | Run `make re` |
 | `Q` | Quit |
 
 ---

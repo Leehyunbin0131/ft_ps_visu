@@ -44,35 +44,53 @@ def parse_arguments():
         else:
             i += 1
     
-    if len(args) < 1 or len(args) > 3:
-        print(f"Usage: {sys.argv[0]} [--ops <ops_file>] [--nums <nums_file>] <path_to_push_swap> [number_of_elements] [max_disorder_percentage]")
+    # If --ops is passed, --nums is required and push_swap path is optional
+    if ops_path is not None and nums_path is None:
+        print("Error: --ops requires --nums to be passed as well.")
         sys.exit(1)
-        
-    target_executable = args[0]
-    if not os.path.isfile(target_executable) or not os.access(target_executable, os.X_OK):
-        print(f"Error: '{target_executable}' is not a valid or executable file.")
-        sys.exit(1)
-        
+    
+    target_executable = None
     n_elems = 500
-    if len(args) >= 2:
-        try:
-            n_elems = int(args[1])
-            if n_elems <= 0:
-                raise ValueError
-        except ValueError:
-            print("Error: number_of_elements must be a positive integer.")
-            sys.exit(1)
-            
     max_disorder = 50
-    if len(args) == 3:
-        try:
-            max_disorder = int(args[2])
-            if max_disorder < 0 or max_disorder > 55:
-                raise ValueError
-        except ValueError:
-            print("Error: max_disorder_percentage must be between 0 and 55.")
+    
+    if ops_path is not None:
+        # --ops passed: push_swap path is optional, no n_elems/max_disorder
+        if len(args) > 1:
+            print(f"Usage: {sys.argv[0]} [--ops <ops_file>] [--nums <nums_file>] [<path_to_push_swap>]")
             sys.exit(1)
-            
+        if len(args) == 1:
+            target_executable = args[0]
+            if not os.path.isfile(target_executable) or not os.access(target_executable, os.X_OK):
+                print(f"Error: '{target_executable}' is not a valid or executable file.")
+                sys.exit(1)
+    else:
+        # Normal mode or --nums only: push_swap path is required
+        if len(args) < 1 or len(args) > 3:
+            print(f"Usage: {sys.argv[0]} [--nums <nums_file>] <path_to_push_swap> [number_of_elements] [max_disorder_percentage]")
+            sys.exit(1)
+        target_executable = args[0]
+        if not os.path.isfile(target_executable) or not os.access(target_executable, os.X_OK):
+            print(f"Error: '{target_executable}' is not a valid or executable file.")
+            sys.exit(1)
+        
+        if len(args) >= 2:
+            try:
+                n_elems = int(args[1])
+                if n_elems <= 0:
+                    raise ValueError
+            except ValueError:
+                print("Error: number_of_elements must be a positive integer.")
+                sys.exit(1)
+                
+        if len(args) == 3:
+            try:
+                max_disorder = int(args[2])
+                if max_disorder < 0 or max_disorder > 55:
+                    raise ValueError
+            except ValueError:
+                print("Error: max_disorder_percentage must be between 0 and 55.")
+                sys.exit(1)
+    
     return target_executable, n_elems, max_disorder, ops_path, nums_path
 
 # ==========================================
@@ -113,7 +131,15 @@ class PushSwapVisualizer:
         self.disorder = max_disorder
         self.ops_path = ops_path
         self.nums_path = nums_path
+        self.has_ops = ops_path is not None
+        self.has_nums = nums_path is not None
         self.actual_disorder = 0.0
+        
+        self.make_dir = None
+        self.binary_name = "push_swap"
+        if target_executable is not None:
+            self.make_dir = os.path.dirname(os.path.abspath(target_executable))
+            self.binary_name = os.path.basename(target_executable)
         
         self.allowed_sizes = [10, 50, 100, 200, 500, 1000]
         if self.n_elems not in self.allowed_sizes:
@@ -133,6 +159,7 @@ class PushSwapVisualizer:
         self.force_redraw = True
         self.auto_play = False
         self.play_dir = "FWD"
+        self.ordered_status = None  # None = ?, "OK" = green, "KO" = red
         
         self.fps = 30
         self.frame_delay = 1.0 / self.fps
@@ -181,6 +208,7 @@ class PushSwapVisualizer:
         self.accumulator = 0
         self.ops = []
         self.total_ops = 0
+        self.ordered_status = None
         
         sys.stdout.write("\033[2J\033[H\033[1;36mGenerating data and running push_swap... Please wait.\033[0m\r\n")
         sys.stdout.flush()
@@ -302,6 +330,16 @@ class PushSwapVisualizer:
         if op in inv_map:
             self.exec_op(inv_map[op])
 
+    def check_ordered(self):
+        if len(self.stack_b) != 0:
+            self.ordered_status = "KO"
+            return
+        lst = list(self.stack_a)
+        if all(lst[i] <= lst[i+1] for i in range(len(lst)-1)):
+            self.ordered_status = "OK"
+        else:
+            self.ordered_status = "KO"
+
     def get_rgb(self, val, max_val):
         if val <= 0: return "0;0;0"
         ratio = val / max_val
@@ -384,6 +422,16 @@ class PushSwapVisualizer:
         dir_col = c_cyan if self.play_dir == "FWD" else c_magenta
         mode_str = self.flags[self.flag_idx]
         
+        if self.ordered_status is None:
+            ordered_str = f"Ordered: {c_dim}?{c_rst}"
+            ordered_plain = len("Ordered: ?")
+        elif self.ordered_status == "OK":
+            ordered_str = f"Ordered: {c_green}OK{c_rst}"
+            ordered_plain = len("Ordered: OK")
+        else:
+            ordered_str = f"Ordered: {c_red}KO{c_rst}"
+            ordered_plain = len("Ordered: KO")
+        
         top_items = [
             (len("push_swap visualizer"), f"{c_cyan}push_swap visualizer{c_rst}"),
             (len(f"Nums: {self.n_elems}"), f"{c_yellow}Nums: {self.n_elems}{c_rst}"),
@@ -391,7 +439,8 @@ class PushSwapVisualizer:
             (len(f"Disorder: {self.actual_disorder:.1f}%"), f"{c_magenta}Disorder: {self.actual_disorder:.1f}%{c_rst}"),
             (len(f"Ops: {self.op_idx}/{self.total_ops}"), f"{c_bold}Ops: {self.op_idx}/{self.total_ops}{c_rst}"),
             (len(f"Auto: {auto_str} ({self.play_dir})"), f"Auto: {auto_col}{auto_str}{c_rst} ({dir_col}{self.play_dir}{c_rst})"),
-            (len(f"Speed: {speed_val}/s"), f"{c_bold}Speed: {speed_val}/s{c_rst}")
+            (len(f"Speed: {speed_val}/s"), f"{c_bold}Speed: {speed_val}/s{c_rst}"),
+            (ordered_plain, ordered_str)
         ]
         
         bottom_items = [
@@ -401,14 +450,24 @@ class PushSwapVisualizer:
             (len("[B] Back"), f"[{c_dim}B{c_rst}] Back"),
             (len("[Z] Speed-"), f"[{c_dim}Z{c_rst}] Speed-"),
             (len("[X] Speed+"), f"[{c_dim}X{c_rst}] Speed+"),
-            (len("[G] Re-gen"), f"[{c_yellow}G{c_rst}] Re-gen"),
-            (len("[M] Mode"), f"[{c_green}M{c_rst}] Mode"),
-            (len("[A] Nums-"), f"[{c_cyan}A{c_rst}] Nums-"),
-            (len("[S] Nums+"), f"[{c_cyan}S{c_rst}] Nums+"),
-            (len("[D] Disorder-"), f"[{c_magenta}D{c_rst}] Disorder-"),
-            (len("[F] Disorder+"), f"[{c_magenta}F{c_rst}] Disorder+"),
-            (len("[Q] Quit"), f"[{c_red}Q{c_rst}] Quit")
+            (len("[E] Check"), f"[{c_yellow}E{c_rst}] Check"),
         ]
+        
+        if not self.has_ops:
+            if not self.has_nums:
+                bottom_items.append((len("[G] Re-gen"), f"[{c_yellow}G{c_rst}] Re-gen"))
+            bottom_items.append((len("[M] Mode"), f"[{c_green}M{c_rst}] Mode"))
+        
+        if not self.has_ops and not self.has_nums:
+            bottom_items.append((len("[A] Nums-"), f"[{c_cyan}A{c_rst}] Nums-"))
+            bottom_items.append((len("[S] Nums+"), f"[{c_cyan}S{c_rst}] Nums+"))
+            bottom_items.append((len("[D] Disorder-"), f"[{c_magenta}D{c_rst}] Disorder-"))
+            bottom_items.append((len("[F] Disorder+"), f"[{c_magenta}F{c_rst}] Disorder+"))
+        
+        if not self.has_ops and self.target_executable is not None:
+            bottom_items.append((len("[C] Make"), f"[{c_yellow}C{c_rst}] Make"))
+        
+        bottom_items.append((len("[Q] Quit"), f"[{c_red}Q{c_rst}] Quit"))
         
         top_chunks = self.layout_items(top_items, 3, cols)
         bottom_chunks = self.layout_items(bottom_items, 6, cols)
@@ -489,6 +548,109 @@ class PushSwapVisualizer:
             self.disorder = new_val
             self.generate_data()
 
+    def show_make_screen(self, make_re=False):
+        c_rst = "\033[0m"; c_bold = "\033[1m"; c_cyan = "\033[1;36m"
+        c_green = "\033[1;32m"; c_red = "\033[1;31m"; c_yellow = "\033[1;33m"
+        c_dim = "\033[2m"
+        
+        cmd = "make re" if make_re else "make"
+        
+        # Run the command and collect output
+        output_lines = [f"{c_cyan}Running '{cmd}' in {self.make_dir}...{c_rst}", ""]
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=self.make_dir,
+                shell=True,
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.stdout:
+                output_lines.extend(result.stdout.split('\n'))
+            if result.stderr:
+                output_lines.extend([f"{c_red}{line}{c_rst}" for line in result.stderr.split('\n')])
+            
+            output_lines.append(f"\n{c_bold}Exit code: {result.returncode}{c_rst}")
+        except Exception as e:
+            output_lines.append(f"{c_red}Error running {cmd}: {e}{c_rst}")
+        
+        # Scroll state
+        scroll_offset = 0
+        
+        while True:
+            cols, lines = shutil.get_terminal_size()
+            
+            # Footer always takes 3-4 lines
+            binary_path = os.path.join(self.make_dir, self.binary_name)
+            binary_exists = os.path.isfile(binary_path)
+            
+            footer_lines = 3
+            if not binary_exists:
+                footer_lines = 4
+            
+            max_content_lines = max(lines - footer_lines, 1)
+            total_lines = len(output_lines)
+            
+            # Clamp scroll offset
+            max_scroll = max(total_lines - max_content_lines, 0)
+            scroll_offset = min(scroll_offset, max_scroll)
+            
+            # Draw
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.flush()
+            
+            visible = output_lines[scroll_offset:scroll_offset + max_content_lines]
+            for line in visible:
+                # Truncate long lines to avoid wrapping issues
+                if len(line) > cols - 1:
+                    line = line[:cols - 1]
+                print(line)
+            
+            # Fill remaining space
+            for _ in range(max_content_lines - len(visible)):
+                print()
+            
+            # Footer
+            print(f"\n{'='*min(60, cols)}")
+            print(f"{c_green}[W] Back{c_rst} | {c_yellow}[C] Make{c_rst} | {c_yellow}[R] Make re{c_rst} | {c_red}[Q] Quit{c_rst} | {c_dim}↑/↓ Scroll{c_rst}")
+            if not binary_exists:
+                print(f"{c_red}Warning: Binary '{self.binary_name}' not found!{c_rst}")
+            
+            sys.stdout.flush()
+            
+            while True:
+                key = get_key(None)
+                if key:
+                    if key == '\x1b[A' or key.lower() == 'k':  # Up arrow or K
+                        scroll_offset = max(scroll_offset - 1, 0)
+                        break
+                    elif key == '\x1b[B' or key.lower() == 'j':  # Down arrow or J
+                        scroll_offset = min(scroll_offset + 1, max_scroll)
+                        break
+                    elif key.startswith("\x1b"):
+                        continue
+                    k = key.lower()
+                    if k == 'w':
+                        # Check binary existence at the moment W is pressed
+                        binary_path = os.path.join(self.make_dir, self.binary_name)
+                        if os.path.isfile(binary_path):
+                            self.force_redraw = True
+                            return
+                        else:
+                            sys.stdout.write(f"\n{c_red}Binary '{self.binary_name}' not found. Cannot return to visualizer.{c_rst}\n")
+                            sys.stdout.flush()
+                    elif k == 'c':
+                        self.show_make_screen(make_re=False)
+                        return
+                    elif k == 'r':
+                        self.show_make_screen(make_re=True)
+                        return
+                    elif k == 'q':
+                        sys.exit(0)
+
     def run(self):
         self.generate_data()
         
@@ -556,18 +718,30 @@ class PushSwapVisualizer:
                             self.op_idx -= 1
                             self.exec_inv_op(self.ops[self.op_idx])
                     elif k == 'g':
-                        self.generate_data()
+                        if not self.has_ops and not self.has_nums:
+                            self.generate_data()
                     elif k == 'm':
-                        self.flag_idx = (self.flag_idx + 1) % len(self.flags)
-                        self.generate_data()
+                        if not self.has_ops:
+                            self.flag_idx = (self.flag_idx + 1) % len(self.flags)
+                            self.generate_data()
                     elif k == 'a':
-                        self.change_elems(-1)
+                        if not self.has_ops and not self.has_nums:
+                            self.change_elems(-1)
                     elif k == 's':
-                        self.change_elems(1)
+                        if not self.has_ops and not self.has_nums:
+                            self.change_elems(1)
                     elif k == 'd':
-                        self.change_disorder(-1)
+                        if not self.has_ops and not self.has_nums:
+                            self.change_disorder(-1)
                     elif k == 'f':
-                        self.change_disorder(1)
+                        if not self.has_ops and not self.has_nums:
+                            self.change_disorder(1)
+                    elif k == 'e':
+                        self.check_ordered()
+                        self.force_redraw = True
+                    elif k == 'c':
+                        if not self.has_ops and self.target_executable is not None:
+                            self.show_make_screen(make_re=False)
                     elif k == 'q':
                         break
 
