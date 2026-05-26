@@ -15,19 +15,48 @@ from collections import deque
 # CONFIGURATION & INITIALIZATION
 # ==========================================
 def parse_arguments():
-    if len(sys.argv) < 2 or len(sys.argv) > 4:
-        print(f"Usage: {sys.argv[0]} <path_to_push_swap> [number_of_elements] [max_disorder_percentage]")
+    args = sys.argv[1:]
+    
+    ops_path = None
+    nums_path = None
+    
+    # Extract --ops and --nums flags
+    i = 0
+    while i < len(args):
+        if args[i] == '--ops':
+            if i + 1 >= len(args):
+                print("Error: --ops requires a path argument.")
+                sys.exit(1)
+            ops_path = args[i + 1]
+            if not os.path.isfile(ops_path):
+                print(f"Error: ops file '{ops_path}' not found.")
+                sys.exit(1)
+            args = args[:i] + args[i+2:]
+        elif args[i] == '--nums':
+            if i + 1 >= len(args):
+                print("Error: --nums requires a path argument.")
+                sys.exit(1)
+            nums_path = args[i + 1]
+            if not os.path.isfile(nums_path):
+                print(f"Error: nums file '{nums_path}' not found.")
+                sys.exit(1)
+            args = args[:i] + args[i+2:]
+        else:
+            i += 1
+    
+    if len(args) < 1 or len(args) > 3:
+        print(f"Usage: {sys.argv[0]} [--ops <ops_file>] [--nums <nums_file>] <path_to_push_swap> [number_of_elements] [max_disorder_percentage]")
         sys.exit(1)
         
-    target_executable = sys.argv[1]
+    target_executable = args[0]
     if not os.path.isfile(target_executable) or not os.access(target_executable, os.X_OK):
         print(f"Error: '{target_executable}' is not a valid or executable file.")
         sys.exit(1)
         
     n_elems = 500
-    if len(sys.argv) >= 3:
+    if len(args) >= 2:
         try:
-            n_elems = int(sys.argv[2])
+            n_elems = int(args[1])
             if n_elems <= 0:
                 raise ValueError
         except ValueError:
@@ -35,16 +64,16 @@ def parse_arguments():
             sys.exit(1)
             
     max_disorder = 50
-    if len(sys.argv) == 4:
+    if len(args) == 3:
         try:
-            max_disorder = int(sys.argv[3])
+            max_disorder = int(args[2])
             if max_disorder < 0 or max_disorder > 55:
                 raise ValueError
         except ValueError:
             print("Error: max_disorder_percentage must be between 0 and 55.")
             sys.exit(1)
             
-    return target_executable, n_elems, max_disorder
+    return target_executable, n_elems, max_disorder, ops_path, nums_path
 
 # ==========================================
 # TERMINAL CONTEXT MANAGER
@@ -78,10 +107,12 @@ def get_key(timeout):
 # VISUALIZER ENGINE
 # ==========================================
 class PushSwapVisualizer:
-    def __init__(self, target_executable, n_elems, max_disorder):
+    def __init__(self, target_executable, n_elems, max_disorder, ops_path=None, nums_path=None):
         self.target_executable = target_executable
         self.n_elems = n_elems
         self.disorder = max_disorder
+        self.ops_path = ops_path
+        self.nums_path = nums_path
         self.actual_disorder = 0.0
         
         self.allowed_sizes = [10, 50, 100, 200, 500, 1000]
@@ -154,60 +185,77 @@ class PushSwapVisualizer:
         sys.stdout.write("\033[2J\033[H\033[1;36mGenerating data and running push_swap... Please wait.\033[0m\r\n")
         sys.stdout.flush()
 
-        raw_sequence = random.sample(range(-1000000, 1000000), self.n_elems)
-        raw_sequence.sort()
+        # Load or generate numbers
+        if self.nums_path:
+            with open(self.nums_path, 'r') as f:
+                content = f.read().strip()
+            raw_sequence = [int(x) for x in content.split()]
+            self.n_elems = len(raw_sequence)
+            # Update allowed_sizes if needed
+            if self.n_elems not in self.allowed_sizes:
+                self.allowed_sizes.append(self.n_elems)
+                self.allowed_sizes.sort()
+        else:
+            raw_sequence = random.sample(range(-1000000, 1000000), self.n_elems)
+            raw_sequence.sort()
 
-        n = self.n_elems
-        total_pairs = (n * (n - 1)) / 2.0
-        target_inv = int((self.disorder / 100.0) * total_pairs)
+            n = self.n_elems
+            total_pairs = (n * (n - 1)) / 2.0
+            target_inv = int((self.disorder / 100.0) * total_pairs)
 
-        if target_inv > 0:
-            inv = [0] * n
-            indices = list(range(n))
-            random.shuffle(indices)
-            
-            remaining = target_inv
-            for i in indices:
-                max_cap = n - 1 - i
-                take = random.randint(0, min(remaining, max_cap))
-                inv[i] = take
-                remaining -= take
-                
-            if remaining > 0:
+            if target_inv > 0:
+                inv = [0] * n
+                indices = list(range(n))
                 random.shuffle(indices)
+                
+                remaining = target_inv
                 for i in indices:
                     max_cap = n - 1 - i
-                    space = max_cap - inv[i]
-                    if space > 0:
-                        take = min(remaining, space)
-                        inv[i] += take
-                        remaining -= take
-                    if remaining == 0:
-                        break
+                    take = random.randint(0, min(remaining, max_cap))
+                    inv[i] = take
+                    remaining -= take
+                    
+                if remaining > 0:
+                    random.shuffle(indices)
+                    for i in indices:
+                        max_cap = n - 1 - i
+                        space = max_cap - inv[i]
+                        if space > 0:
+                            take = min(remaining, space)
+                            inv[i] += take
+                            remaining -= take
+                        if remaining == 0:
+                            break
 
-            result_sequence = []
-            for i in range(n - 1, -1, -1):
-                val = raw_sequence[i]
-                insert_pos = inv[i]
-                result_sequence.insert(insert_pos, val)
-                
-            raw_sequence = result_sequence
+                result_sequence = []
+                for i in range(n - 1, -1, -1):
+                    val = raw_sequence[i]
+                    insert_pos = inv[i]
+                    result_sequence.insert(insert_pos, val)
+                    
+                raw_sequence = result_sequence
 
         self.actual_disorder = self.compute_disorder(raw_sequence)
 
-        str_seq = [str(x) for x in raw_sequence]
-        current_flag = self.flags[self.flag_idx]
+        # Load ops from file or run push_swap
+        if self.ops_path:
+            with open(self.ops_path, 'r') as f:
+                content = f.read().strip()
+            self.ops = content.split() if content else []
+            self.total_ops = len(self.ops)
+        else:
+            str_seq = [str(x) for x in raw_sequence]
+            current_flag = self.flags[self.flag_idx]
+            
+            result = subprocess.run(
+                [self.target_executable, current_flag] + str_seq,
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            self.ops = result.stdout.strip().split()
+            self.total_ops = len(self.ops)
         
-       
-        result = subprocess.run(
-            [self.target_executable, current_flag] + str_seq,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        self.ops = result.stdout.strip().split()
-        self.total_ops = len(self.ops)
-       
             
         sorted_seq = sorted(raw_sequence)
         rank_map = {val: i + 1 for i, val in enumerate(sorted_seq)}
@@ -527,8 +575,8 @@ class PushSwapVisualizer:
 # MAIN ENTRY
 # ==========================================
 def main():
-    target, elements, max_disorder = parse_arguments()
-    visualizer = PushSwapVisualizer(target, elements, max_disorder)
+    target, elements, max_disorder, ops_path, nums_path = parse_arguments()
+    visualizer = PushSwapVisualizer(target, elements, max_disorder, ops_path, nums_path)
     visualizer.run()
 
 
