@@ -134,6 +134,7 @@ class PushSwapVisualizer:
         self.has_ops = ops_path is not None
         self.has_nums = nums_path is not None
         self.actual_disorder = 0.0
+        self.stderr_logs = []
         
         self.make_dir = None
         self.binary_name = "push_swap"
@@ -283,6 +284,7 @@ class PushSwapVisualizer:
             )
             self.ops = result.stdout.strip().split()
             self.total_ops = len(self.ops)
+            self.stderr_logs = result.stderr.strip().split('\n') if result.stderr else []
         
             
         sorted_seq = sorted(raw_sequence)
@@ -452,7 +454,9 @@ class PushSwapVisualizer:
             (len("[X] Speed+"), f"[{c_dim}X{c_rst}] Speed+"),
             (len("[E] Check"), f"[{c_yellow}E{c_rst}] Check"),
         ]
-        
+        if not self.has_ops and self.target_executable is not None:
+            bottom_items.append((len("[I] Logs"), f"[{c_yellow}I{c_rst}] Logs"))
+
         if not self.has_ops:
             if not self.has_nums:
                 bottom_items.append((len("[G] Re-gen"), f"[{c_yellow}G{c_rst}] Re-gen"))
@@ -651,6 +655,61 @@ class PushSwapVisualizer:
                     elif k == 'q':
                         sys.exit(0)
 
+    def show_logs_screen(self):
+        c_rst = "\033[0m"; c_bold = "\033[1m"; c_cyan = "\033[1;36m"
+        c_green = "\033[1;32m"; c_red = "\033[1;31m"; c_yellow = "\033[1;33m"
+        c_dim = "\033[2m"
+
+        if not self.stderr_logs:
+            output_lines = [f"{c_dim}No stderr logs available.{c_rst}"]
+        else:
+            output_lines = [f"{c_cyan}push_swap stderr logs:{c_rst}", ""]
+            output_lines.extend(self.stderr_logs)
+
+        scroll_offset = 0
+
+        while True:
+            cols, lines = shutil.get_terminal_size()
+
+            footer_lines = 3
+            max_content_lines = max(lines - footer_lines, 1)
+            total_lines = len(output_lines)
+
+            max_scroll = max(total_lines - max_content_lines, 0)
+            scroll_offset = min(scroll_offset, max_scroll)
+
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.flush()
+
+            visible = output_lines[scroll_offset:scroll_offset + max_content_lines]
+            for line in visible:
+                if len(line) > cols - 1:
+                    line = line[:cols - 1]
+                print(line)
+
+            for _ in range(max_content_lines - len(visible)):
+                print()
+
+            print(f"\n{'='*min(60, cols)}")
+            print(f"{c_green}[W] Back{c_rst} | {c_dim}↑/↓ Scroll{c_rst}")
+            sys.stdout.flush()
+
+            while True:
+                key = get_key(None)
+                if key:
+                    if key == '\x1b[A' or key.lower() == 'k':
+                        scroll_offset = max(scroll_offset - 1, 0)
+                        break
+                    elif key == '\x1b[B' or key.lower() == 'j':
+                        scroll_offset = min(scroll_offset + 1, max_scroll)
+                        break
+                    elif key.startswith("\x1b"):
+                        continue
+                    k = key.lower()
+                    if k == 'w':
+                        self.force_redraw = True
+                        return
+
     def run(self):
         self.generate_data()
         
@@ -739,6 +798,8 @@ class PushSwapVisualizer:
                     elif k == 'e':
                         self.check_ordered()
                         self.force_redraw = True
+                    elif k == 'i':
+                        self.show_logs_screen()
                     elif k == 'c':
                         if not self.has_ops and self.target_executable is not None:
                             self.show_make_screen(make_re=False)
