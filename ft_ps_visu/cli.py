@@ -5,11 +5,17 @@ import os
 import random
 import subprocess
 import signal
-import select
-import termios
-import tty
 import shutil
+import time
 from collections import deque
+
+# OS-specific imports for terminal control
+if os.name == 'nt':
+    import msvcrt
+else:
+    import select
+    import termios
+    import tty
 
 # ==========================================
 # CONFIGURATION & INITIALIZATION
@@ -60,8 +66,11 @@ def parse_arguments():
             sys.exit(1)
         if len(args) == 1:
             target_executable = args[0]
-            if not os.path.isfile(target_executable) or not os.access(target_executable, os.X_OK):
-                print(f"Error: '{target_executable}' is not a valid or executable file.")
+            if not os.path.isfile(target_executable):
+                print(f"Error: '{target_executable}' is not a valid file.")
+                sys.exit(1)
+            if os.name != 'nt' and not os.access(target_executable, os.X_OK):
+                print(f"Error: '{target_executable}' is not executable.")
                 sys.exit(1)
     else:
         # Normal mode or --nums only: push_swap path is required
@@ -69,8 +78,11 @@ def parse_arguments():
             print(f"Usage: {sys.argv[0]} [--nums <nums_file>] <path_to_push_swap> [number_of_elements] [max_disorder_percentage]")
             sys.exit(1)
         target_executable = args[0]
-        if not os.path.isfile(target_executable) or not os.access(target_executable, os.X_OK):
-            print(f"Error: '{target_executable}' is not a valid or executable file.")
+        if not os.path.isfile(target_executable):
+            print(f"Error: '{target_executable}' is not a valid file.")
+            sys.exit(1)
+        if os.name != 'nt' and not os.access(target_executable, os.X_OK):
+            print(f"Error: '{target_executable}' is not executable.")
             sys.exit(1)
         
         if len(args) >= 2:
@@ -98,12 +110,18 @@ def parse_arguments():
 # ==========================================
 class TerminalTUI:
     def __init__(self):
-        self.fd = sys.stdin.fileno()
-        self.old_settings = None
+        if os.name != 'nt':
+            self.fd = sys.stdin.fileno()
+            self.old_settings = None
 
     def __enter__(self):
-        self.old_settings = termios.tcgetattr(self.fd)
-        tty.setcbreak(self.fd)
+        if os.name == 'nt':
+            # Enable ANSI escape sequences on Windows command prompt
+            os.system('')
+        else:
+            self.old_settings = termios.tcgetattr(self.fd)
+            tty.setcbreak(self.fd)
+            
         sys.stdout.write("\033[?1049h\033[?25l")
         sys.stdout.flush()
         return self
@@ -111,15 +129,41 @@ class TerminalTUI:
     def __exit__(self, exc_type, exc_val, exc_tb):
         sys.stdout.write("\033[0m\033[?25h\033[?1049l")
         sys.stdout.flush()
-        termios.tcsetattr(self.fd, termios.TCSADRAIN, self.old_settings)
+        if os.name != 'nt':
+            termios.tcsetattr(self.fd, termios.TCSADRAIN, self.old_settings)
 
 def get_key(timeout):
-    r, _, _ = select.select([sys.stdin], [], [], timeout)
-    if r:
-        data = os.read(sys.stdin.fileno(), 3)
-        if len(data) >= 1:
-            return data.decode('utf-8', 'ignore')
-    return None
+    if os.name == 'nt':
+        start_time = time.time()
+        while True:
+            if msvcrt.kbhit():
+                char = msvcrt.getch()
+                # Handle special keys (e.g., arrow keys)
+                if char in (b'\x00', b'\xe0'):
+                    extra = msvcrt.getch()
+                    if extra == b'H': return '\x1b[A'  # Up Arrow
+                    if extra == b'P': return '\x1b[B'  # Down Arrow
+                    return ''
+                try:
+                    return char.decode('utf-8', 'ignore')
+                except:
+                    return None
+            
+            if timeout is not None:
+                if (time.time() - start_time) >= timeout:
+                    return None
+                time.sleep(0.01)
+            else:
+                time.sleep(0.01)
+    else:
+        # Unix/Linux macOS implementation
+        timeout_val = timeout if timeout is not None else 0
+        r, _, _ = select.select([sys.stdin], [], [], timeout_val)
+        if r:
+            data = os.read(sys.stdin.fileno(), 3)
+            if len(data) >= 1:
+                return data.decode('utf-8', 'ignore')
+        return None
 
 # ==========================================
 # VISUALIZER ENGINE
@@ -153,14 +197,13 @@ class PushSwapVisualizer:
         self.total_ops = 0
         self.op_idx = 0
         
-        # New mode/flags integration
         self.flags = ["--adaptive", "--simple", "--medium", "--complex"]
         self.flag_idx = 0
 
         self.force_redraw = True
         self.auto_play = False
         self.play_dir = "FWD"
-        self.ordered_status = None  # None = ?, "OK" = green, "KO" = red
+        self.ordered_status = None
         
         self.fps = 30
         self.frame_delay = 1.0 / self.fps
@@ -214,13 +257,11 @@ class PushSwapVisualizer:
         sys.stdout.write("\033[2J\033[H\033[1;36mGenerating data and running push_swap... Please wait.\033[0m\r\n")
         sys.stdout.flush()
 
-        # Load or generate numbers
         if self.nums_path:
             with open(self.nums_path, 'r') as f:
                 content = f.read().strip()
             raw_sequence = [int(x) for x in content.split()]
             self.n_elems = len(raw_sequence)
-            # Update allowed_sizes if needed
             if self.n_elems not in self.allowed_sizes:
                 self.allowed_sizes.append(self.n_elems)
                 self.allowed_sizes.sort()
@@ -266,7 +307,6 @@ class PushSwapVisualizer:
 
         self.actual_disorder = self.compute_disorder(raw_sequence)
 
-        # Load ops from file or run push_swap
         if self.ops_path:
             with open(self.ops_path, 'r') as f:
                 content = f.read().strip()
@@ -276,6 +316,7 @@ class PushSwapVisualizer:
             str_seq = [str(x) for x in raw_sequence]
             current_flag = self.flags[self.flag_idx]
             
+            # Execute push_swap based on the platform shell mechanics
             result = subprocess.run(
                 [self.target_executable, current_flag] + str_seq,
                 capture_output=True,
@@ -286,7 +327,6 @@ class PushSwapVisualizer:
             self.total_ops = len(self.ops)
             self.stderr_logs = result.stderr.strip().split('\n') if result.stderr else []
         
-            
         sorted_seq = sorted(raw_sequence)
         rank_map = {val: i + 1 for i, val in enumerate(sorted_seq)}
         ranks_sequence = [rank_map[val] for val in raw_sequence]
@@ -559,7 +599,6 @@ class PushSwapVisualizer:
         
         cmd = "make re" if make_re else "make"
         
-        # Run the command and collect output
         output_lines = [f"{c_cyan}Running '{cmd}' in {self.make_dir}...{c_rst}", ""]
         
         try:
@@ -581,13 +620,11 @@ class PushSwapVisualizer:
         except Exception as e:
             output_lines.append(f"{c_red}Error running {cmd}: {e}{c_rst}")
         
-        # Scroll state
         scroll_offset = 0
         
         while True:
             cols, lines = shutil.get_terminal_size()
             
-            # Footer always takes 3-4 lines
             binary_path = os.path.join(self.make_dir, self.binary_name)
             binary_exists = os.path.isfile(binary_path)
             
@@ -598,26 +635,21 @@ class PushSwapVisualizer:
             max_content_lines = max(lines - footer_lines, 1)
             total_lines = len(output_lines)
             
-            # Clamp scroll offset
             max_scroll = max(total_lines - max_content_lines, 0)
             scroll_offset = min(scroll_offset, max_scroll)
             
-            # Draw
             sys.stdout.write("\033[2J\033[H")
             sys.stdout.flush()
             
             visible = output_lines[scroll_offset:scroll_offset + max_content_lines]
             for line in visible:
-                # Truncate long lines to avoid wrapping issues
                 if len(line) > cols - 1:
                     line = line[:cols - 1]
                 print(line)
             
-            # Fill remaining space
             for _ in range(max_content_lines - len(visible)):
                 print()
             
-            # Footer
             print(f"\n{'='*min(60, cols)}")
             print(f"{c_green}[W] Back{c_rst} | {c_yellow}[C] Make{c_rst} | {c_yellow}[R] Make re{c_rst} | {c_red}[Q] Quit{c_rst} | {c_dim}↑/↓ Scroll{c_rst}")
             if not binary_exists:
@@ -628,17 +660,16 @@ class PushSwapVisualizer:
             while True:
                 key = get_key(None)
                 if key:
-                    if key == '\x1b[A' or key.lower() == 'k':  # Up arrow or K
+                    if key == '\x1b[A' or key.lower() == 'k':
                         scroll_offset = max(scroll_offset - 1, 0)
                         break
-                    elif key == '\x1b[B' or key.lower() == 'j':  # Down arrow or J
+                    elif key == '\x1b[B' or key.lower() == 'j':
                         scroll_offset = min(scroll_offset + 1, max_scroll)
                         break
                     elif key.startswith("\x1b"):
                         continue
                     k = key.lower()
                     if k == 'w':
-                        # Check binary existence at the moment W is pressed
                         binary_path = os.path.join(self.make_dir, self.binary_name)
                         if os.path.isfile(binary_path):
                             self.force_redraw = True
@@ -713,7 +744,8 @@ class PushSwapVisualizer:
     def run(self):
         self.generate_data()
         
-        signal.signal(signal.SIGWINCH, self.handle_resize)
+        if os.name != 'nt':
+            signal.signal(signal.SIGWINCH, self.handle_resize)
         
         def quit_signal(sig, frame):
             sys.exit(0)
@@ -747,6 +779,7 @@ class PushSwapVisualizer:
                                 self.accumulator = 0
                                 break
 
+                # On Windows, missing SIGWINCH is mitigated by checking terminal size changes inside draw_screen
                 self.draw_screen()
                 
                 key = get_key(self.frame_delay)
