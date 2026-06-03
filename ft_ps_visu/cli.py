@@ -186,7 +186,7 @@ class PushSwapVisualizer:
             self.make_dir = os.path.dirname(os.path.abspath(target_executable))
             self.binary_name = os.path.basename(target_executable)
         
-        self.allowed_sizes = [10, 50, 100, 200, 500, 1000]
+        self.allowed_sizes = [10, 50, 100, 200, 500, 1000, 2000, 3000, 5000]
         if self.n_elems not in self.allowed_sizes:
             self.allowed_sizes.append(self.n_elems)
             self.allowed_sizes.sort()
@@ -588,7 +588,7 @@ class PushSwapVisualizer:
 
     def change_disorder(self, direction):
         new_val = self.disorder + (direction * 5)
-        if 0 <= new_val <= 55:
+        if 0 <= new_val <= 100:
             self.disorder = new_val
             self.generate_data()
 
