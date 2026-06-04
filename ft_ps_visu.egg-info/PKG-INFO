@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: ft_ps_visu
-Version: 1.0.5
+Version: 1.0.6
 Summary: A terminal visualizer for the 42 push_swap project with real-time TUI, controlled disorder generation, and interactive playback.
 Author: Italo Almeida
 License: MIT
@@ -38,7 +38,10 @@ A terminal visualizer for the **42 push_swap** project. It generates controlled 
 - **Real-time TUI visualization** — watch your `push_swap` algorithm sort stacks live in the terminal.
 - **Controlled disorder generation** — creates sequences with precise inversion percentages.
 - **Four test modes** — adaptive, simple, medium, and complex.
+- **Selectable number ranges** — generate values across the full `INT_MIN`–`INT_MAX` span, `-1M`–`1M`, or `0`–`1M`.
 - **Interactive controls** — play/pause, forward/reverse, step-by-step, speed adjustment, and more.
+- **stderr logs viewer** — inspect anything your `push_swap` prints to `stderr` in a scrollable screen.
+- **File replay** — load numbers and/or operations from files (`--nums` / `--ops`) to debug specific cases.
 - **True-color bars** — gradient-colored bars representing values for easy visual tracking.
 - **Responsive layout** — adapts to terminal resize events.
 
@@ -235,11 +238,13 @@ When `--ops` is passed, `--nums` is **required**. The `push_swap` path becomes o
 | `S` | Increase number of elements |
 | `D` | Decrease disorder percentage |
 | `F` | Increase disorder percentage |
-| `C` | Run `make` in the push_swap directory |
+| `R` | Cycle number range (MIN_MAX → -1M→1M → 0→1M) |
 | `E` | Check if Stack A is sorted (shows OK/KO) |
+| `I` | Open the `push_swap` stderr logs viewer |
+| `C` | Run `make` in the push_swap directory |
 | `Q` | Quit |
 
-> **Note:** Controls `G`, `A`, `S`, `D`, `F` are hidden when `--ops` is used. Controls `G`, `A`, `S`, `D`, `F`, `C` are hidden when `--nums` is used without `--ops`. `C` is hidden when `--ops` is used or when no push_swap path is provided.
+> **Note:** Controls `G`, `M`, `A`, `S`, `D`, `F`, `R`, `I`, `C` are hidden when `--ops` is used. Controls `G`, `A`, `S`, `D`, `F`, `R` are hidden when `--nums` is used without `--ops` (`M`, `I`, `C` remain available). `I` and `C` require a `push_swap` path to be provided.
 
 ### Make screen (`C`)
 
@@ -251,6 +256,24 @@ Pressing `C` opens a make screen that runs `make` in the directory of the provid
 | `C` | Run `make` again |
 | `R` | Run `make re` |
 | `Q` | Quit |
+
+### Logs screen (`I`)
+
+Pressing `I` opens a scrollable viewer showing everything your `push_swap` wrote to `stderr` during the last run (for example, `Error` messages). Use `↑`/`↓` (or `k`/`j`) to scroll and `W` to return. This control is only available when a `push_swap` path is provided and `--ops` is not used.
+
+---
+
+## Number ranges
+
+Press `R` to cycle the interval used to generate random values. The default is `MIN_MAX`.
+
+| Mode      | Generated values            | Description                                  |
+|-----------|-----------------------------|----------------------------------------------|
+| `MIN_MAX` | `-2147483648` … `2147483647`| Full 32-bit signed integer range (default)   |
+| `-1M -> 1M` | `-1000000` … `999999`     | Mixed positive and negative values           |
+| `0 -> 1M` | `0` … `999999`              | Non-negative values only                     |
+
+The current range is shown in the top info bar as `Range: <mode>`. This control is only available when numbers are generated randomly (hidden when `--nums` or `--ops` is used).
 
 ---
 

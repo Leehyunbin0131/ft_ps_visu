@@ -200,6 +200,15 @@ class PushSwapVisualizer:
         self.flags = ["--adaptive", "--simple", "--medium", "--complex"]
         self.flag_idx = 0
 
+        # Number generation range modes: (label, min, max_exclusive)
+        # MIN_MAX uses the 32-bit signed integer range (INT_MIN..INT_MAX).
+        self.range_modes = [
+            ("MIN_MAX", -2147483648, 2147483648),
+            ("-1M -> 1M", -1000000, 1000000),
+            ("0 -> 1M", 0, 1000000),
+        ]
+        self.range_idx = 0
+
         self.force_redraw = True
         self.auto_play = False
         self.play_dir = "FWD"
@@ -266,7 +275,8 @@ class PushSwapVisualizer:
                 self.allowed_sizes.append(self.n_elems)
                 self.allowed_sizes.sort()
         else:
-            raw_sequence = random.sample(range(-1000000, 1000000), self.n_elems)
+            _, range_min, range_max = self.range_modes[self.range_idx]
+            raw_sequence = random.sample(range(range_min, range_max), self.n_elems)
             raw_sequence.sort()
 
             n = self.n_elems
@@ -484,6 +494,12 @@ class PushSwapVisualizer:
             (len(f"Speed: {speed_val}/s"), f"{c_bold}Speed: {speed_val}/s{c_rst}"),
             (ordered_plain, ordered_str)
         ]
+
+        if not self.has_ops and not self.has_nums:
+            range_str = self.range_modes[self.range_idx][0]
+            top_items.append(
+                (len(f"Range: {range_str}"), f"{c_cyan}Range: {range_str}{c_rst}")
+            )
         
         bottom_items = [
             (len("[P] Play/Pause"), f"[{c_dim}P{c_rst}] Play/Pause"),
@@ -507,6 +523,7 @@ class PushSwapVisualizer:
             bottom_items.append((len("[S] Nums+"), f"[{c_cyan}S{c_rst}] Nums+"))
             bottom_items.append((len("[D] Disorder-"), f"[{c_magenta}D{c_rst}] Disorder-"))
             bottom_items.append((len("[F] Disorder+"), f"[{c_magenta}F{c_rst}] Disorder+"))
+            bottom_items.append((len("[R] Range"), f"[{c_cyan}R{c_rst}] Range"))
         
         if not self.has_ops and self.target_executable is not None:
             bottom_items.append((len("[C] Make"), f"[{c_yellow}C{c_rst}] Make"))
@@ -828,6 +845,10 @@ class PushSwapVisualizer:
                     elif k == 'f':
                         if not self.has_ops and not self.has_nums:
                             self.change_disorder(1)
+                    elif k == 'r':
+                        if not self.has_ops and not self.has_nums:
+                            self.range_idx = (self.range_idx + 1) % len(self.range_modes)
+                            self.generate_data()
                     elif k == 'e':
                         self.check_ordered()
                         self.force_redraw = True

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ft_ps_visu"
-version = "1.0.5"
+version = "1.0.6"
 description = "A terminal visualizer for the 42 push_swap project with real-time TUI, controlled disorder generation, and interactive playback."
 readme = "README.md"
 license = {text = "MIT"}
